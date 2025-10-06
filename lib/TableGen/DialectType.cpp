@@ -44,35 +44,22 @@ bool DialectType::init(raw_ostream &errs, GenDialectsContext &context,
   m_summary = record->getValueAsString("summary");
   m_description = record->getValueAsString("description");
 
-  if (auto *repVal = record->getValue("representation")) {
-    if (auto *dag = llvm::dyn_cast<DagInit>(repVal->getValue())) {
-      if (auto *op = llvm::dyn_cast<llvm::DefInit>(dag->getOperator())) {
-        llvm::StringRef opName = op->getDef()->getName();
-        if (opName == "repr_struct") {
-          m_structBacked = true;
+  if (auto *dag =
+          cast<DagInit>(record->getValue("representation")->getValue())) {
+    if (cast<DefInit>(dag->getOperator())->getDef()->getName() ==
+        "repr_struct") {
+      m_structBacked = true;
 
-          if (dag->getNumArgs() != 1) {
-            errs << "'repr_struct' expects exactly one type argument\n";
-            return false;
-          }
-          auto *intDag = dyn_cast<DagInit>(dag->getArg(0));
-          auto *intDef =
-              intDag ? dyn_cast<DefInit>(intDag->getOperator()) : nullptr;
-          if (!intDef || intDef->getDef()->getName() != "IntegerType") {
-            errs << "sentinel of repr_struct must be an IntegerType\n";
-            return false;
-          }
-          auto *widthInit = dyn_cast<IntInit>(intDag->getArg(0));
-          if (!widthInit) {
-            errs << "IntegerType width is not an integer\n";
-            return false;
-          }
-          m_structSentinelBitWidth = widthInit->getValue();
-        }
+      if (dag->getNumArgs() != 1) {
+        errs << "'repr_struct' expects exactly one type argument\n";
+        return false;
       }
+      m_structSentinelBitWidth =
+          llvm::cast<llvm::IntInit>(
+              llvm::cast<llvm::DagInit>(dag->getArg(0))->getArg(0))
+              ->getValue();
     }
   }
-
   if (auto *p = record->getValue("structPrefix"))
     m_structPrefix = record->getValueAsString("structPrefix").str();
   else
