@@ -221,10 +221,15 @@ void DialectType::emitDeclaration(raw_ostream &out, GenDialect *dialect) const {
     unsigned fieldIdx = 1; // sentinel
     for (const auto &argument : typeArguments()) {
       std::string camel = convertToCamelFromSnakeCase(argument.name, true);
-      out << tgfmt("      unsigned get$0() const { return "
-                   "::llvm::cast<::llvm::IntegerType>(getElementType($1))->"
-                   "getBitWidth(); }\n",
-                   &fmt, camel, fieldIdx++);
+      out << tgfmt(
+          R"(      unsigned get$0() const {
+        ::llvm::Type *elt = getElementType($1);
+        if (elt->isStructTy())
+          return 0;
+        return ::llvm::cast<::llvm::IntegerType>(elt)->getBitWidth();
+      }
+)",
+          &fmt, camel, fieldIdx++);
     }
 
     out << "    };\n\n";
@@ -315,11 +320,15 @@ void DialectType::emitDefinition(raw_ostream &out, GenDialect *dialect) const {
         "  __fields.push_back(::llvm::IntegerType::get($_context, $0));\n",
         &fmt, Twine(m_structSentinelBitWidth));
 
-    for (const auto &getterArg : getterArgs)
-      out << tgfmt(
-          "  __fields.push_back(::llvm::IntegerType::get($_context, $0));\n",
-          &fmt, getterArg.name);
-
+    for (const auto &getterArg : getterArgs) {
+      out << tgfmt(R"(
+  if ($0 == 0)
+    __fields.push_back(::llvm::StructType::get($_context));
+  else
+    __fields.push_back(::llvm::IntegerType::get($_context, $0));
+)",
+                   &fmt, getterArg.name);
+    }
     out << tgfmt("  auto *__st = ::llvm::StructType::create($_context, "
                  "__fields, __os.str(), /*isPacked=*/false);\n",
                  &fmt);
